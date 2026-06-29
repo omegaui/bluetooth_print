@@ -83,7 +83,22 @@
     @try {
       NSLog(@"connect device begin -> %@", [device objectForKey:@"name"]);
       CBPeripheral *peripheral = [_scannedPeripherals objectForKey:[device objectForKey:@"address"]];
-        
+
+      // The scanned-peripheral cache is wiped on every startScan and only
+      // repopulated as peripherals are rediscovered. Connecting to a device
+      // from a stale scan list (page revisit / restarted scan) leaves
+      // `peripheral` nil, and CoreBluetooth's connectPeripheral: raises an
+      // NSInternalInconsistencyException ("peripheral != nil") that the
+      // FlutterError @catch below cannot trap — it hard-crashes the app.
+      // Fail gracefully instead so Dart can prompt the user to rescan.
+      if (peripheral == nil) {
+        NSLog(@"connect aborted -> peripheral not in scan cache, ask user to rescan");
+        result([FlutterError errorWithCode:@"connect_error"
+                                   message:@"Printer is no longer available. Please rescan and try again."
+                                   details:nil]);
+        return;
+      }
+
       self.state = ^(ConnectState state) {
         [self updateConnectState:state];
       };
